@@ -59,7 +59,7 @@ works with a direct call, and **a documented failure earns the point in full.**
 
 from mcp.server.fastmcp import FastMCP
 
-from tools import search_listings as _search_listings_impl  # noqa: F401 — you'll use this below
+from tools import search_listings as _search_listings_impl
 
 # log_level="WARNING" keeps the server from printing an INFO line for every
 # request. Without it your terminal fills with "Processing request of type
@@ -67,23 +67,30 @@ from tools import search_listings as _search_listings_impl  # noqa: F401 — you
 mcp = FastMCP("fitfindr", log_level="WARNING")
 
 
-# ── TODO: uncomment and fill this in ──────────────────────────────────────────
-#
-# @mcp.tool()
-# def search_listings(
-#     description: str,
-#     size: str | None = None,
-#     max_price: float | None = None,
-# ) -> list[dict]:
-#     """
-#     <-- YOUR DESCRIPTION GOES HERE.
-#
-#         One or two sentences. What does this tool do, what does it need, and
-#         what does it give back when it finds nothing? Written for a reader
-#         who cannot see the code.
-#     """
-#     return _search_listings_impl(description, size, max_price)
-#
+# ── search_listings, exposed over MCP ─────────────────────────────────────────
+
+@mcp.tool()
+def search_listings(
+    description: str,
+    size: str | None = None,
+    max_price: float | None = None,
+) -> list[dict]:
+    """
+    Search a catalog of 40 secondhand clothing listings (Depop, thredUp,
+    Poshmark) by keywords, with an optional size and an optional price ceiling.
+
+    Inputs: description (str, keywords such as "vintage graphic tee");
+    size (str or null, e.g. "M", "US 8", "30" — whole-size match, so "M" also
+    matches "S/M" and "One Size", but "S" never matches "US 9");
+    max_price (number or null, US dollars, inclusive).
+
+    Returns a list of listing objects, best keyword match first, at most 10:
+    each has id, title, description, category, style_tags, size, condition,
+    price (number), colors, brand (string or null), platform.
+    Returns an empty list [] when nothing matches — never null, never an error.
+    """
+    return _search_listings_impl(description, size, max_price)
+
 # ──────────────────────────────────────────────────────────────────────────────
 #
 # Two notes on the block above.

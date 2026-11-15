@@ -13,6 +13,7 @@ import config
 import trace
 from tools import search_listings, suggest_outfit, create_fit_card
 from generate import ModelUnavailable
+from mcp_client import call_tool, MCPError
 
 
 # ── session state ─────────────────────────────────────────────────────────────
@@ -158,21 +159,38 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
         elif next_step == "search":
             parsed = session["parsed"]
-            results = search_listings(
-                parsed["description"], parsed["size"], parsed["max_price"]
-            )
+            try:
+                # search_listings runs on the MCP server (mcp_server.py), not in-process.
+                results = call_tool("search_listings", {
+                    "description": parsed["description"],
+                    "size": parsed["size"],
+                    "max_price": parsed["max_price"],
+                })
+            except MCPError as exc:
+                session["error"] = (
+                    "The listing search couldn't run: the search server "
+                    "(mcp_server.py) didn't respond. Run `python mcp_client.py` "
+                    "to see whether it starts, then try the query again.\n"
+                    f"  Details: {str(exc).splitlines()[0]}"
+                )
+                trace.step("search_listings (via MCP)", inputs=_fmt(parsed),
+                           returned="MCPError", note="stop: search server unreachable")
+                next_step = "done"
+                continue
+            if results is None:
+                results = []
             session["search_results"] = results
             session["steps"].append("search_listings")
 
             # ── THE BRANCH ──
             if not session["search_results"]:
                 session["error"] = _empty_search_message(parsed)
-                trace.step("search_listings", inputs=_fmt(parsed), returned=results,
+                trace.step("search_listings (via MCP)", inputs=_fmt(parsed), returned=results,
                            note="branch: empty → stop, suggest_outfit NOT called")
                 next_step = "done"
             else:
                 session["selected_item"] = session["search_results"][0]
-                trace.step("search_listings", inputs=_fmt(parsed), returned=results,
+                trace.step("search_listings (via MCP)", inputs=_fmt(parsed), returned=results,
                            note=f"branch: {len(results)} found → selected "
                                 f"{session['selected_item']['id']}, go to suggest_outfit")
                 next_step = "outfit"
@@ -184,7 +202,7 @@ def run_agent(query: str, wardrobe: dict) -> dict:
                 session["outfit_suggestion"] = suggest_outfit(item, session["wardrobe"])
             except ModelUnavailable as exc:
                 session["error"] = _model_down_message("outfit ideas", item, exc)
-                trace.step("suggest_outfit", inputs={"new_item": item},
+                trace.step("suggest_outfit", inputs={"new_item": f"{item['id']} {item['title']}"},
                            returned="ModelUnavailable", note="stop: model unreachable")
                 next_step = "done"
                 continue
@@ -204,7 +222,7 @@ def run_agent(query: str, wardrobe: dict) -> dict:
                 session["fit_card"] = create_fit_card(outfit, item)
             except ModelUnavailable as exc:
                 session["error"] = _model_down_message("the fit card", item, exc)
-                trace.step("create_fit_card", inputs={"new_item": item},
+                trace.step("create_fit_card", inputs={"new_item": f"{item['id']} {item['title']}"},
                            returned="ModelUnavailable", note="stop: model unreachable")
                 next_step = "done"
                 continue
