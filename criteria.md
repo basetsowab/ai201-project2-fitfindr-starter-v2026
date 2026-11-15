@@ -42,63 +42,59 @@ Given a query that matches no listings, the agent stops before calling
 
 ---
 
-## 3. Something about state
+## Criterion 3: State Management and Item Consistency
 
-<!-- YOU WRITE THIS ONE.
+**Success criterion:** In at least 9 out of 10 test runs, both `suggest_outfit` and `create_fit_card` should receive the same item ID as `session["selected_item"]["id"]`.
 
-     How would you know that the item your search found is the same item the
-     next tool received? Name something countable or observable.
+**Why:** One of the most important parts of FitFindr is making sure the application remembers which clothing item the user selected. If someone chooses a particular shirt, jacket, or pair of shoes, the AI should continue using that item throughout the outfit recommendation process.
 
-     This is the criterion people find hardest, because state failure doesn't
-     look like state failure — it looks like a tool problem. Something that
-     compares session["selected_item"] against what actually reached
-     suggest_outfit is the shape you're after. -->
+I would check the item IDs recorded in `session["tool_inputs"]` after each run and compare them with the ID stored in `session["selected_item"]`. A test only passes if both tools receive the correct selected item ID.
 
-
-
-**Why this target:**
-
-
+I chose 9 out of 10 as an initial testing target because occasional AI workflow mistakes may happen, but I still expect the application to maintain consistent state. Ideally, this should eventually reach 10 out of 10 because recommending an outfit for the wrong item would make the application unreliable.
 
 ---
 
-## 4. Something about the fit card
+## Criterion 4: Fit Card Quality and Formatting
 
-<!-- YOU WRITE THIS ONE.
+**Success criterion:** In at least 9 out of 10 generated fit cards, the description should contain 2–4 sentences, with the selected item's price appearing exactly once and its platform appearing exactly once.
 
-     The fit card calls a model, so the same input can produce different words
-     each time. That's not a bug — it's the nature of the tool. So what would
-     make it acceptable?
+**Why:** The fit card is one of the main features users interact with, so I want the information to be clear, readable, and consistent.
 
-     Think about what you'd actually be unhappy to see. A caption that never
-     mentions the price? Two different items producing the same opening
-     sentence? A card longer than a caption anyone would post? Any of those can
-     be turned into a number. -->
+If the description is too long, users might lose interest or have difficulty understanding the recommendation. If it is too short, it might not provide enough information about the outfit.
 
+I also think including the price and platform is important because users need to know how much the clothing item costs and where they can find it.
 
+For testing, I would generate 10 fit cards using different clothing items and count how many meet all three requirements. A card would fail if its description had fewer than 2 or more than 4 sentences, omitted the price or platform, or repeated either detail.
 
-**Why this target:**
-
-
+Although the language model might not always follow formatting instructions perfectly, I want the application to produce consistent results.
 
 ---
 
-## 5. Your choice
+## Criterion 5: Price Filter Accuracy
 
-<!-- YOU WRITE THIS ONE TOO.
+**Success criterion:** In 10 out of 10 test searches that specify a `max_price`, every returned clothing item should have a price less than or equal to the user's selected maximum.
 
-     Pick something you actually care about getting right. Speed, the empty
-     wardrobe path, what happens when the model can't be reached, whether the
-     search respects a price ceiling — anything, as long as it names a number
-     or an observable outcome. -->
+**Why:** One of the reasons someone might use FitFindr is to find clothing that fits their budget. If the user sets a maximum price of $50, the application should not recommend clothing that costs $70 or $100.
 
+For testing, I would run 10 searches using different maximum prices, such as $25, $50, $75, and $100. I would then inspect the returned results to make sure none exceed the specified budget.
 
+A test would only pass if every returned item has a valid price that is within the requested limit. Items with missing or unparseable prices should not count as verified matches.
 
-**Why this target:**
-
-
+I chose 10 out of 10 because price filtering should be a strict requirement rather than something the AI approximates. This would make the shopping experience more reliable and help users trust the recommendations.
 
 ---
+
+## Overall Evaluation
+
+For FitFindr AI, I consider the application successful when it can consistently remember selected clothing items, generate readable outfit recommendations, and respect the user's shopping preferences.
+
+The three criteria focus on different parts of the application: state management, AI-generated content quality, and filtering accuracy.
+
+If the application fails any of these tests, I would investigate whether the problem comes from the session state, the AI prompt, or the filtering logic.
+
+In the future, I would also like to improve size filtering, error handling, and recommendations based on the user's existing wardrobe.
+
+My overall goal is to make FitFindr more than just an AI outfit generator. I want it to become a practical tool that helps users discover clothing, stay within their budgets, and make better outfit choices.
 
 <!-- ─────────────────────────────────────────────────────────────────────────
      UNIT 4 — read this before you change anything above.
