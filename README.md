@@ -248,14 +248,50 @@ that produced it:
 **Empty search**
 
 ```
+$ python app.py ask 'graphic tee size M under $10' --trace
+[1] parse_query (regex)
+      in:  graphic tee size M under $10
+      out: description='graphic tee', size='M', max_price=10.0
+[2] search_listings (via MCP)
+      in:  description='graphic tee', size='M', max_price=10.0
+      out: [] (empty)
+      →    branch: empty → stop, suggest_outfit NOT called
 
+  No listings matched 'graphic tee' in size M under $10. To get results, try: raise your max price to at least $15.
+
+0 model calls this session
 ```
 
-**On the MCP move:** <!-- what changed in your code, and whether anything
-behaved differently afterwards. If the rewire didn't work, say exactly where it
-broke — the error text and the last thing that worked. That earns the point in
-full. -->
+**On the MCP move:** `search_listings` is registered in `mcp_server.py` (FastMCP, typed inputs `description: str`, `size: str | None`, `max_price: float | None`, description states the empty case). In `agent.py::run_agent` the direct `search_listings(...)` call was replaced by `call_tool("search_listings", {...})` from `mcp_client.py`, wrapped in `try/except MCPError`. Nothing behaved differently: for `('vintage graphic tee', 'M', 30)`, `('designer ballgown', 'XXS', 5)` and `('denim jacket', None, 50)` the MCP result was `==` the direct result (10, 0 and 8 listings, still a `list` of dicts, `[]` stays `[]`). The one visible change is speed — every call starts the server process, so search takes about a second instead of being instant. `_empty_search_message` still calls `search_listings` directly to work out which filter emptied the search; that's for wording the message only.
 
+### Failure modes, triggered on purpose
+
+**1. Empty search** — `python app.py ask 'designer ballgown size XXS under $5'`
+
+```
+  No listings matched 'designer ballgown' in size XXS under $5. To get results, try: use broader words for the item — e.g. 'tee', 'jeans', 'jacket', 'dress', 'sneakers' — the search matches words in listing titles and style tags, so brand names and very specific terms often miss; or remove the size and price limits to see what's close.
+```
+
+Handler: `agent.py::_empty_search_message`. It re-runs the search with the size removed, then with the price removed, and names whichever one would have returned results (e.g. "raise your max price to at least $15" above).
+
+**2. Empty wardrobe** — `python app.py ask '...' --empty-wardrobe`
+
+Handler: `tools.py::suggest_outfit` checks `wardrobe["items"]`; if empty it asks the model for outfits built from common basics and the answer starts "No wardrobe saved, so here are general ideas:". It never returns `""` (blank model output falls back to a fixed sentence).
+
+**3. Model unavailable** — bad `GEMINI_API_KEY` in `.env`, `python app.py ask 'vintage graphic tee under $30, size M'`
+
+```
+  Found a match — Y2K Baby Tee — Butterfly Print ($18.0 on depop) — but couldn't write outfit ideas: the AI model couldn't be reached. Check that GEMINI_API_KEY in .env is correct and that you're online, then run the same query again.
+  Details: The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com.
+```
+
+Handler: `agent.py::run_agent` catches `generate.ModelUnavailable` around both model tools and stops with `session["error"]` set; no stack trace.
+
+**Extra: MCP server unreachable** — `mcp_server.py` temporarily renamed
+
+```
+  The listing search couldn't run: the search server (mcp_server.py) didn't respond. Run `python mcp_client.py` to see whether it starts, then try the query again.
+```
 
 
 ---
