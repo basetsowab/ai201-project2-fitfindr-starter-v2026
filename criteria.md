@@ -29,6 +29,12 @@ tool calls and returns a fit card — in at least 4 of 5 tries.
      "my search is a plain keyword match and some phrasings will miss" is a
      real answer. -->
 
+> **How it's scored** (added in unit 4, before any test run; the criterion above is unchanged):
+> scenario `vintage graphic tee under $30` with the example wardrobe, 5 tries. A try is
+> PASS when `session["error"]` is None, `session["steps"]` is exactly
+> `search_listings, suggest_outfit, create_fit_card`, and `session["fit_card"]` is a
+> non-empty string. Anything else, including a crash, is FAIL.
+
 ---
 
 ## 2. An impossible query stops before the second tool
@@ -39,6 +45,12 @@ Given a query that matches no listings, the agent stops before calling
 **Why this target:**
 <!-- Why is 5 of 5 reasonable here when criterion 1 isn't? What's different
      about this path? -->
+
+> **How it's scored** (added in unit 4, before any test run):
+> scenario `designer ballgown size XXS under $5`, 5 tries. PASS when `session["steps"]`
+> is exactly `search_listings` (so `suggest_outfit` was never called), `fit_card` is
+> None, and `session["error"]` contains the words "To get results, try:" followed by
+> at least one change to make.
 
 ---
 
@@ -51,6 +63,13 @@ Given a query that matches no listings, the agent stops before calling
 I would check the item IDs recorded in `session["tool_inputs"]` after each run and compare them with the ID stored in `session["selected_item"]`. A test only passes if both tools receive the correct selected item ID.
 
 I chose 9 out of 10 as an initial testing target because occasional AI workflow mistakes may happen, but I still expect the application to maintain consistent state. Ideally, this should eventually reach 10 out of 10 because recommending an outfit for the wrong item would make the application unreliable.
+
+> **How it's scored** (added in unit 4, before any test run; target unchanged):
+> 10 runs, each a different query that matches listings (scenario `state: 10 matching
+> queries` in `scenarios.py`). A run is PASS when it completed with no error and
+> `session["tool_inputs"]["suggest_outfit"]` and `session["tool_inputs"]["create_fit_card"]`
+> both equal `session["selected_item"]["id"]`. A run that stopped early or crashed is
+> FAIL, because the tools never received anything to compare.
 
 ---
 
@@ -68,6 +87,19 @@ For testing, I would generate 10 fit cards using different clothing items and co
 
 Although the language model might not always follow formatting instructions perfectly, I want the application to produce consistent results.
 
+> **How it's scored** (added in unit 4, before any test run; target unchanged):
+> 10 runs, each a different item (scenario `fit card: 10 different items`). A card is
+> PASS only if all three hold:
+> - **2–4 sentences.** The card is split after every `.`, `!` or `?` that ends a
+>   run of text; a piece made only of hashtags, emoji or whitespace isn't a sentence.
+> - **Price exactly once.** The listing stores e.g. `18.0`; it counts as appearing when
+>   the card contains `$18` or `$18.00` (a `$`, then the whole-dollar amount, optional
+>   `.00`). Written-out forms like "18 bucks" do not count. Two matches = FAIL.
+> - **Platform exactly once.** The listing's `platform` (`depop`, `thredUp`,
+>   `poshmark`) matched as a whole word, case-insensitive, so `Depop` counts and
+>   `#depopfinds` does not. Two matches = FAIL.
+> A run with no fit card (stopped early or crashed) is FAIL.
+
 ---
 
 ## Criterion 5: Price Filter Accuracy
@@ -81,6 +113,13 @@ For testing, I would run 10 searches using different maximum prices, such as $25
 A test would only pass if every returned item has a valid price that is within the requested limit. Items with missing or unparseable prices should not count as verified matches.
 
 I chose 10 out of 10 because price filtering should be a strict requirement rather than something the AI approximates. This would make the shopping experience more reliable and help users trust the recommendations.
+
+> **How it's scored** (added in unit 4, before any test run; target unchanged):
+> 10 searches with different `max_price` values ($15 to $100, scenario `price ceiling:
+> 10 budgets`). A search is PASS when it returned at least one listing and every
+> listing in `session["search_results"]` has a numeric `price` ≤ the parsed
+> `max_price`. A search that returns nothing is FAIL — there's nothing to verify — and
+> so is one where the parser didn't pick up a `max_price` at all.
 
 ---
 
