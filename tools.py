@@ -293,7 +293,18 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
         f"the price ({price_text}) and the platform ({platform}) once each, and "
         "say something specific about the vibe."
     )
-    return (generate(prompt, system=system) or "").strip()
+    text = (generate(prompt, system=system) or "").strip()
+    if not text:
+        # Unit 4 improvement: the model came back blank. suggest_outfit already
+        # promises a non-empty string; this keeps the same promise here, with a
+        # plain caption built from the listing (2 sentences, price and platform
+        # once each) instead of handing the user "".
+        title = new_item.get("title") or "this find"
+        return (
+            f"Thrifted the {title} for {price_text} on {platform}. "
+            "Styling it with pieces I already own and it just works."
+        )
+    return text
 
 
 def _describe_item(item: dict) -> str:
