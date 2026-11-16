@@ -266,8 +266,10 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
         A 2-4 sentence caption that mentions the item, its price and its
         platform. If `outfit` is empty or whitespace, returns the message
         "Couldn't write a fit card: there was no outfit suggestion to build it
-        from." instead of calling the model. Raises generate.ModelUnavailable
-        if the model can't be reached.
+        from." instead of calling the model. If the model answers with a blank
+        string, returns a plain two-sentence caption built from the listing
+        instead of "". Raises generate.ModelUnavailable if the model can't be
+        reached.
 
     Test it:
         python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
