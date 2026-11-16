@@ -1,63 +1,105 @@
 """
-The runs your test needs. ← UNIT 4, MILESTONE 3
+The runs the test needs. ← UNIT 4, MILESTONE 3
 
-Each of your five criteria needs something run against it. A criterion about
-the empty-search branch needs an impossible query. One about the fit card needs
-the same item run more than once. Working that out is Milestone 3's first step,
-and this file is where you write it down.
+One scenario per criterion in criteria.md. `run_eval.py` runs each one the
+number of times in its "tries" (5 for criteria 1-2, which are written out of
+5; 10 for criteria 3-5, which are written out of 10) and scores every try with
+`checks.py`, using the rules written under each criterion.
 
-`run_eval.py` runs everything here five times and writes the run log — five
-because your criteria are written out of five.
-
-Three scenarios are filled in to show the shape. Add or change whatever your
-own criteria need — these are a starting point, not a fixed set.
+A scenario has either "query" (the same query every try) or "queries" (try N
+uses queries[N-1]), plus:
+    criterion  the number in criteria.md, or None for a diagnostic run
+    tries      how many tries
+    target     passes needed for MET
 """
+
+TEN_ITEMS = [
+    "denim jacket under $50", "corduroy pants", "platform sneakers size 8",
+    "chunky knit cardigan", "leather bomber jacket", "reversible bucket hat",
+    "suede chelsea boots", "silk slip dress", "cargo pants under $30",
+    "linen blazer",
+]
 
 SCENARIOS = [
     {
-        # A query the data can match. Criterion 1.
+        # Criterion 1: a query the data can match completes all three tools.
         "name": "matching query completes",
         "query": "vintage graphic tee under $30",
         "wardrobe": "example",
         "criterion": 1,
+        "tries": 5,
+        "target": 4,
     },
     {
-        # A query nothing can match. Criterion 2 — the branch.
+        # Criterion 2: the branch. Nothing matches, so it stops before tool 2.
         "name": "impossible query stops early",
         "query": "designer ballgown size XXS under $5",
         "wardrobe": "example",
         "criterion": 2,
+        "tries": 5,
+        "target": 5,
     },
     {
-        # A user with nothing saved. One of unit 4's three failure modes.
+        # Criterion 3: state. Ten runs, each a query whose first match is a
+        # different listing.
+        "name": "state: 10 matching queries",
+        "queries": TEN_ITEMS,
+        "wardrobe": "example",
+        "criterion": 3,
+        "tries": 10,
+        "target": 9,
+    },
+    {
+        # Criterion 4: fit cards for 10 different items.
+        "name": "fit card: 10 different items",
+        "queries": TEN_ITEMS,
+        "wardrobe": "example",
+        "criterion": 4,
+        "tries": 10,
+        "target": 9,
+    },
+    {
+        # Criterion 5: the price ceiling, ten different budgets ($15 to $100).
+        "name": "price ceiling: 10 budgets",
+        "queries": [
+            "graphic tee under $25", "denim under $50", "jacket under $75",
+            "vintage under $100", "top under $20", "pants under $35",
+            "sneakers under $60", "oversized crewneck under $22", "belt under $15",
+            "blazer under $40",
+        ],
+        "wardrobe": "example",
+        "criterion": 5,
+        "tries": 10,
+        "target": 10,
+    },
+    {
+        # Diagnostic, not one of the five: the empty-wardrobe failure mode.
         "name": "empty wardrobe",
         "query": "denim jacket under $50",
         "wardrobe": "empty",
         "criterion": None,
+        "tries": 1,
     },
-    # TODO: add what your criteria 3, 4 and 5 need.
-    #
-    # Set "criterion" to the number in criteria.md that the scenario tests.
-    # "criterion": None means a diagnostic run — useful to have, but it isn't
-    # one of your five, and run_eval.py marks it as such in the table.
-    #
-    # For a state criterion, any normal query works — what you're checking is
-    # what ends up in the session, not what the user typed.
-    #
-    # For a fit-card criterion, you probably want the SAME query listed more
-    # than once, or several different items, depending on what your criterion
-    # actually says.
 ]
 
 WARDROBES = ("example", "empty")
+
+
+def query_for(scenario: dict, attempt: int) -> str:
+    """The query for try number `attempt` (1-based)."""
+    queries = scenario.get("queries")
+    if queries:
+        return queries[(attempt - 1) % len(queries)]
+    return scenario["query"]
 
 
 def validate() -> list[str]:
     """Complain about anything malformed, before a long run rather than during."""
     problems = []
     for i, scenario in enumerate(SCENARIOS, 1):
-        if not scenario.get("query", "").strip():
-            problems.append(f"scenario {i} has no query")
+        queries = scenario.get("queries") or [scenario.get("query", "")]
+        if not all(q.strip() for q in queries):
+            problems.append(f"scenario {i} has an empty query")
         if scenario.get("wardrobe") not in WARDROBES:
             problems.append(
                 f"scenario {i} has wardrobe {scenario.get('wardrobe')!r} — "

@@ -33,11 +33,12 @@ import datetime as dt
 import sys
 import traceback
 
+import checks
 import config
 import scenarios as scenario_module
 
 
-def run_once(scenario, use_trace=True):
+def run_once(scenario, use_trace=True, query=None):
     """One scenario, one try. Returns everything worth recording."""
     from agent import run_agent
     from utils.data_loader import get_example_wardrobe, get_empty_wardrobe
@@ -50,9 +51,10 @@ def run_once(scenario, use_trace=True):
     if use_trace:
         trace_module.start_trace()
 
-    record = {"error": None, "session": None, "trace": "", "crashed": None}
+    record = {"error": None, "session": None, "trace": "", "crashed": None,
+              "query": query or scenario.get("query")}
     try:
-        record["session"] = run_agent(scenario["query"], wardrobe)
+        record["session"] = run_agent(query or scenario["query"], wardrobe)
     except Exception as exc:  # noqa: BLE001 — a crash is a result worth logging
         record["crashed"] = f"{type(exc).__name__}: {exc}"
         record["traceback"] = traceback.format_exc()
@@ -65,8 +67,8 @@ def run_once(scenario, use_trace=True):
 
 def main():
     parser = argparse.ArgumentParser(description="Run the scenarios and log the results.")
-    parser.add_argument("--tries", "--trials", type=int, default=5, dest="tries",
-                        help="tries per scenario (default 5, matching your criteria)")
+    parser.add_argument("--tries", "--trials", type=int, default=None, dest="tries",
+                        help="tries per scenario (default: each scenario's own 'tries', else 5)")
     parser.add_argument("--label", default="", help="a name for this run, e.g. 'before'")
     args = parser.parse_args()
 
@@ -81,7 +83,7 @@ def main():
         print("scenarios.py is empty. Milestone 3 starts by filling it in.", file=sys.stderr)
         sys.exit(1)
 
-    if args.tries < 5:
+    if args.tries is not None and args.tries < 5:
         print(f"⚠️  {args.tries} tries. Your criteria are written out of five.\n")
 
     # Caching off. Five tries have to be five real answers.
@@ -91,12 +93,16 @@ def main():
     rows = []
     for scenario in scenario_module.SCENARIOS:
         print(f"{scenario['name']}  ({scenario['wardrobe']} wardrobe)")
-        print(f"  query: {scenario['query']}")
+        n_tries = args.tries or scenario.get("tries", 5)
 
         tries = []
-        for attempt in range(1, args.tries + 1):
-            record = run_once(scenario)
+        for attempt in range(1, n_tries + 1):
+            query = scenario_module.query_for(scenario, attempt)
+            record = run_once(scenario, query=query)
+            record["passed"], record["why"] = checks.score(scenario.get("criterion"), record["session"])
             tries.append(record)
+            mark = {True: "PASS", False: "FAIL", None: "----"}[record["passed"]]
+            print(f"  try {attempt}: {mark} {record['why']}  ({query})")
 
             if record["crashed"]:
                 print(f"  try {attempt}: CRASHED — {record['crashed']}")
@@ -120,7 +126,7 @@ def write_report(rows, args):
     label = f"_{args.label}" if args.label else ""
     path = config.RESULTS_DIR / f"run_{stamp}{label}.md"
 
-    n = args.tries
+    n = max(len(r["tries"]) for r in rows)
     headers = " | ".join(f"Try {i}" for i in range(1, n + 1))
     divider = "|".join(["---"] * n)
 
@@ -129,7 +135,8 @@ def write_report(rows, args):
         "",
         "- Produced by: `run_eval.py::main`",
         "- Loop: `agent.py::run_agent` · tools: `tools.py`",
-        f"- Tries per scenario: {n}, caching off",
+        "- Tries per scenario: each scenario's own count (5 for criteria 1-2, 10 for 3-5), caching off",
+        "- PASS/FAIL filled in by `checks.py::score`, from the rules under each criterion in criteria.md",
         f"- Temperature: {config.TEMPERATURE}",
         f"- When: {dt.datetime.now().strftime('%Y-%m-%d %H:%M')}",
         "",
@@ -152,14 +159,22 @@ def write_report(rows, args):
             if number
             else f"{scenario['name']} _(diagnostic — not one of your five)_"
         )
-        lines.append(f"| {label_text} |  | {' | '.join([' '] * n)} |  |")
+        cells = [{True: "PASS", False: "FAIL", None: "-"}[rec.get("passed")] for rec in row["tries"]]
+        cells += ["-"] * (n - len(cells))
+        passes = sum(1 for rec in row["tries"] if rec.get("passed"))
+        total, target = len(row["tries"]), scenario.get("target")
+        if number and target is not None:
+            verdict = f"{'MET' if passes >= target else 'MISSED'} ({passes}/{total})"
+            target_text = f"{target} of {total}"
+        else:
+            verdict, target_text = "", ""
+        lines.append(f"| {label_text} | {target_text} | {' | '.join(cells)} | {verdict} |")
 
     lines += [
         "",
-        "> The Try and Verdict columns are blank on purpose. Whether a try",
-        "> passed depends on the criterion you wrote, so it's yours to decide.",
-        "> Count the passes, then read that count against your target: a row",
-        "> targeting 4 of 5 with three PASS cells is MISSED (3/5).",
+        "> PASS/FAIL comes from checks.py, which encodes the scoring rules written",
+        "> under each criterion in criteria.md before this run. Check any cell against",
+        "> the raw output below.",
         "",
         "---",
         "",
@@ -173,11 +188,13 @@ def write_report(rows, args):
     for row in rows:
         scenario = row["scenario"]
         lines += [f"### {scenario['name']}", "",
-                  f"- Query: `{scenario['query']}`",
+                  f"- Query: `{scenario_module.query_for(scenario, 1)}`"
+                  + (" (a different one each try, listed below)" if scenario.get("queries") else ""),
                   f"- Wardrobe: {scenario['wardrobe']}", ""]
 
         for i, record in enumerate(row["tries"], 1):
-            lines.append(f"**Try {i}**")
+            mark = {True: "PASS", False: "FAIL", None: "-"}[record.get("passed")]
+            lines.append(f"**Try {i}**: {mark} ({record.get('why', '')}), query `{record.get('query')}`")
             lines.append("")
 
             if record["crashed"]:
